@@ -6,6 +6,10 @@ from PIL import Image
 import geocoder
 import smtplib
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
+import io
 
 # Load the trained model
 model = tf.keras.models.load_model("fire_detection_model.keras")
@@ -22,27 +26,46 @@ def preprocess_image(image):
 def get_location():
     g = geocoder.ip('me')  # Get location using IP address
     if g.ok:
-        return f"Latitude: {g.latlng[0]}, Longitude: {g.latlng[1]}"
-    return "Location not available"
+        latitude, longitude = g.latlng
+        google_maps_link = f"https://www.google.com/maps?q={latitude},{longitude}"
+        return f"Latitude: {latitude}, Longitude: {longitude}", google_maps_link
+    return "Location not available", ""
 
-# Function to send email
-def send_email(location, recipient_email="abhinaypyasi@gmail.com"):
+# Function to send email with image attachment
+def send_email(location, google_maps_link, image, recipient_email="abhinaypyasi@gmail.com"):
     sender_email = "a80614436@gmail.com"
     sender_password = "fulf cqad ktxf nzyy"  # Use App Password for security
     subject = "🔥 Fire Alert with Live Location!"
 
-    message = MIMEText(f"Fire detected! 🚨\nLocation: {location}\nPlease take immediate action!")
-    message["Subject"] = subject
-    message["From"] = sender_email
-    message["To"] = recipient_email
+    # Create email message
+    msg = MIMEMultipart()
+    msg["From"] = sender_email
+    msg["To"] = recipient_email
+    msg["Subject"] = subject
+
+    # Email body
+    body = f"Fire detected! 🚨\nLocation: {location}\nGoogle Maps: {google_maps_link}\nPlease take immediate action!"
+    msg.attach(MIMEText(body, "plain"))
+
+    # Convert image to bytes
+    img_byte_array = io.BytesIO()
+    image.save(img_byte_array, format="JPEG")
+    img_byte_array.seek(0)
+
+    # Attach image
+    part = MIMEBase("application", "octet-stream")
+    part.set_payload(img_byte_array.read())
+    encoders.encode_base64(part)
+    part.add_header("Content-Disposition", "attachment; filename=fire_detected.jpg")
+    msg.attach(part)
 
     try:
         server = smtplib.SMTP("smtp.gmail.com", 587)
         server.starttls()
         server.login(sender_email, sender_password)
-        server.sendmail(sender_email, recipient_email, message.as_string())
+        server.sendmail(sender_email, recipient_email, msg.as_string())
         server.quit()
-        return "✅ Email sent successfully!"
+        return "Email with image sent successfully!"
     except Exception as e:
         return f"Error sending email: {e}"
 
@@ -68,11 +91,13 @@ if uploaded_file is not None:
         st.error(f"🔥 Fire Detected! ")
 
         # Get live location
-        location = get_location()
+        location, google_maps_link = get_location()
         st.warning(f"📍 Live Location: {location}")
+        if google_maps_link:
+            st.markdown(f"[🔗 View on Google Maps]({google_maps_link})")
 
-        # Send email alert
-        email_status = send_email(location)
+        # Send email alert with image
+        email_status = send_email(location, google_maps_link, image)
         st.info(email_status)
         
     else:
