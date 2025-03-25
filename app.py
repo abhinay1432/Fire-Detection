@@ -3,6 +3,9 @@ import numpy as np
 import tensorflow as tf
 import cv2
 from PIL import Image
+import geocoder
+import smtplib
+from email.mime.text import MIMEText
 
 # Load the trained model
 model = tf.keras.models.load_model("fire_detection_model.keras")
@@ -11,10 +14,37 @@ model = tf.keras.models.load_model("fire_detection_model.keras")
 def preprocess_image(image):
     image = image.resize((180, 180))  # Resize to match model input size
     image = np.array(image)  # Convert to NumPy array
-    # image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)  # Convert to BGR (if needed)
     image = image / 255.0  # Normalize pixel values
     image = np.expand_dims(image, axis=0)  # Add batch dimension
     return image
+
+# Function to get live location
+def get_location():
+    g = geocoder.ip('me')  # Get location using IP address
+    if g.ok:
+        return f"Latitude: {g.latlng[0]}, Longitude: {g.latlng[1]}"
+    return "Location not available"
+
+# Function to send email
+def send_email(location, recipient_email="abhinaypyasi@gmail.com"):
+    sender_email = "a80614436@gmail.com"
+    sender_password = "fulf cqad ktxf nzyy"  # Use App Password for security
+    subject = "🔥 Fire Alert with Live Location!"
+
+    message = MIMEText(f"Fire detected! 🚨\nLocation: {location}\nPlease take immediate action!")
+    message["Subject"] = subject
+    message["From"] = sender_email
+    message["To"] = recipient_email
+
+    try:
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
+        server.login(sender_email, sender_password)
+        server.sendmail(sender_email, recipient_email, message.as_string())
+        server.quit()
+        return "✅ Email sent successfully!"
+    except Exception as e:
+        return f"Error sending email: {e}"
 
 # Streamlit UI
 st.title("🔥 Fire Detection App 🔥")
@@ -34,7 +64,16 @@ if uploaded_file is not None:
     # Interpret the result
     fire_probability = prediction[0][0]
     
-    if fire_probability < 0.5:
+    if fire_probability <= 0.5:
         st.error(f"🔥 Fire Detected! ")
+
+        # Get live location
+        location = get_location()
+        st.warning(f"📍 Live Location: {location}")
+
+        # Send email alert
+        email_status = send_email(location)
+        st.info(email_status)
+        
     else:
         st.success(f"✅ No Fire Detected")
