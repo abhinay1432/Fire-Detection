@@ -101,4 +101,4 @@ if uploaded_file is not None:
         st.info(email_status)
         
     else:
-        st.success(f"✅ No Fire Detected")
+         st.success(f"✅ No Fire Detected")
